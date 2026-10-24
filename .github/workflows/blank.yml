@@ -35,18 +35,30 @@ jobs:
       - name: 配置 Gradle 缓存
         uses: gradle/actions/setup-gradle@v4
 
+      - name: 解压项目 zip（自动识别）
+        run: |
+          ZIP=$(find . -maxdepth 2 -name "*.zip" | grep -i lingxi | head -n 1)
+          if [ -n "$ZIP" ]; then
+            echo "发现 zip：$ZIP，正在解压..."
+            unzip -q "$ZIP"
+            echo "解压完成，当前文件列表："
+            ls -la
+          else
+            echo "未发现 zip，跳过解压"
+          fi
+
       - name: 定位项目目录并赋予权限
         run: |
-          GW=$(find . -maxdepth 3 -name gradlew -not -path "*/node_modules/*" | head -n 1)
+          GW=$(find . -maxdepth 4 -name gradlew -not -path "*/node_modules/*" | head -n 1)
           if [ -z "$GW" ]; then
-            echo "仓库里找不到 gradlew，请把 gradlew 和 gradle 文件夹上传到项目根目录"
-            ls -la
+            echo "❌ 找不到 gradlew，文件列表如下："
+            find . -maxdepth 4 -type f | head -50
             exit 1
           fi
           DIR=$(dirname "$GW")
           echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
           chmod +x "$GW"
-          echo "项目目录：$DIR"
+          echo "✅ 项目目录：$DIR"
 
       - name: 打包 APK（含本机生图）
         id: full
