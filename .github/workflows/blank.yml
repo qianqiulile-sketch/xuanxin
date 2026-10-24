@@ -1,4 +1,4 @@
-# 灵犀 Dia 3.0 —— GitHub Actions 自动打包 APK
+# 灵犀 Dia 3.0（水墨江湖 · 无极版）—— GitHub Actions 自动打包 APK
 name: Android 打包
 
 on:
@@ -35,35 +35,49 @@ jobs:
       - name: 配置 Gradle 缓存
         uses: gradle/actions/setup-gradle@v4
 
-      - name: 赋予 gradlew 执行权限
-        run: chmod +x gradlew
+      - name: 定位项目目录并赋予权限
+        run: |
+          GW=$(find . -maxdepth 3 -name gradlew -not -path "*/node_modules/*" | head -n 1)
+          if [ -z "$GW" ]; then
+            echo "仓库里找不到 gradlew，请把 gradlew 和 gradle 文件夹上传到项目根目录"
+            ls -la
+            exit 1
+          fi
+          DIR=$(dirname "$GW")
+          echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
+          chmod +x "$GW"
+          echo "项目目录：$DIR"
 
       - name: 打包 APK（含本机生图）
         id: full
         continue-on-error: true
+        working-directory: ${{ env.PROJECT_DIR }}
         run: ./gradlew --no-daemon --stacktrace assembleDebug -Pdia.localImageGen=true
 
       - name: 打包 APK（不含本机生图，备用）
         id: lite
         if: steps.full.outcome == 'failure'
+        working-directory: ${{ env.PROJECT_DIR }}
         run: ./gradlew --no-daemon --stacktrace clean assembleDebug -Pdia.localImageGen=false
 
       - name: 打包 release APK（更流畅，可选）
         id: release
         continue-on-error: true
+        working-directory: ${{ env.PROJECT_DIR }}
         run: ./gradlew --no-daemon assembleRelease -Pdia.localImageGen=${{ steps.full.outcome == 'success' }}
 
       - name: 运行单元测试（不影响打包结果）
         continue-on-error: true
+        working-directory: ${{ env.PROJECT_DIR }}
         run: ./gradlew --no-daemon testDebugUnitTest -Pdia.localImageGen=${{ steps.full.outcome == 'success' }}
 
       - name: 整理 APK 文件名
         run: |
           mkdir -p out
           TAG="${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}"
-          cp app/build/outputs/apk/debug/app-debug.apk "out/LingXi-Dia-3.0-debug-$TAG.apk"
-          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            cp app/build/outputs/apk/release/app-release.apk "out/LingXi-Dia-3.0-release-$TAG.apk"
+          cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "out/LingXi-Dia-3.0-debug-$TAG.apk"
+          if [ -f "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" ]; then
+            cp "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" "out/LingXi-Dia-3.0-release-$TAG.apk"
           fi
           ls -la out
 
