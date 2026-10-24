@@ -1,4 +1,85 @@
-# This is a basic workflow to help you get started with Actions
+# 灵犀 Dia 3.0（水墨江湖 · 无极版）—— GitHub Actions 自动打包 APK
+name: Android 打包
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 安装 Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 安装 SDK 平台 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: 配置 Gradle 缓存
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 赋予 gradlew 执行权限
+        run: chmod +x gradlew
+
+      - name: 打包 APK（含本机生图）
+        id: full
+        continue-on-error: true
+        run: ./gradlew --no-daemon --stacktrace assembleDebug -Pdia.localImageGen=true
+
+      - name: 打包 APK（不含本机生图，备用）
+        id: lite
+        if: steps.full.outcome == 'failure'
+        run: ./gradlew --no-daemon --stacktrace clean assembleDebug -Pdia.localImageGen=false
+
+      - name: 打包 release APK（更流畅，可选）
+        id: release
+        continue-on-error: true
+        run: ./gradlew --no-daemon assembleRelease -Pdia.localImageGen=${{ steps.full.outcome == 'success' }}
+
+      - name: 运行单元测试（不影响打包结果）
+        continue-on-error: true
+        run: ./gradlew --no-daemon testDebugUnitTest -Pdia.localImageGen=${{ steps.full.outcome == 'success' }}
+
+      - name: 整理 APK 文件名
+        run: |
+          mkdir -p out
+          TAG="${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}"
+          cp app/build/outputs/apk/debug/app-debug.apk "out/LingXi-Dia-3.0-debug-$TAG.apk"
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk "out/LingXi-Dia-3.0-release-$TAG.apk"
+          fi
+          ls -la out
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LingXi-Dia-apk
+          path: out/*.apk
+          if-no-files-found: error
+
+      - name: 发布 Release（仅标签）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*.apk
+          generate_release_notes: true# This is a basic workflow to help you get started with Actions
 
 name: CI
 
